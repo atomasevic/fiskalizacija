@@ -98,7 +98,7 @@ class Fiskalizacija
 
         $X509Issuer = $this->publicCertificateData['issuer'];
         $X509IssuerName = sprintf('CN=%s,O=%s,C=%s', $X509Issuer['CN'], $X509Issuer['O'], $X509Issuer['C']);
-        $X509IssuerSerial = $this->publicCertificateData['serialNumber'];
+        $X509IssuerSerial = self::serialNumberDecimal($this->publicCertificateData['serialNumberHex']);
 
         $publicCertificatePureString = str_replace('-----BEGIN CERTIFICATE-----', '', $this->certificate['cert']);
         $publicCertificatePureString = str_replace('-----END CERTIFICATE-----', '', $publicCertificatePureString);
@@ -141,6 +141,32 @@ class Fiskalizacija
 
         $envelope->getElementsByTagName('Body')->item(0)->appendChild($XMLRequestTypeNode);
         return $envelope->saveXML();
+    }
+
+    /**
+     * X509SerialNumber must be an xs:integer. openssl_x509_parse() renders serials of 128 bits
+     * and more as "0x"-prefixed hex in 'serialNumber', so the decimal is derived from
+     * 'serialNumberHex' instead. Pure PHP: base_convert() is float-based and loses precision
+     * above 2^53, which is far below the 128-bit serials FINA issues since 2020.
+     */
+    public static function serialNumberDecimal($hex)
+    {
+        $dec = '0';
+        foreach (str_split(strtoupper($hex)) as $hexChar) {
+            $carry = hexdec($hexChar);
+            $out = '';
+            for ($i = strlen($dec) - 1; $i >= 0; $i--) {
+                $value = ((int) $dec[$i]) * 16 + $carry;
+                $out = ($value % 10) . $out;
+                $carry = intdiv($value, 10);
+            }
+            while ($carry > 0) {
+                $out = ($carry % 10) . $out;
+                $carry = intdiv($carry, 10);
+            }
+            $dec = ltrim($out, '0') ?: '0';
+        }
+        return $dec;
     }
 
     public function plainXML($XMLRequest)
