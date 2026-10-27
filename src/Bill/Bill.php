@@ -139,25 +139,30 @@ class Bill
     }
 
     /**
-     * Generiranje zaštitnog koda na temelju ulaznih parametara
-     * @param  [type] $pkey privatni kljuc iz certifikata
-     * @param  [type] $oib  oib
-     * @param  [type] $dt   datum i vrijeme izdavanja računa zapisan kao tekst u formatu 'dd.mm.gggg hh:mm:ss'
-     * @param  [type] $bor  brojčana oznaka računa
-     * @param  [type] $opp  oznaka poslovnog prostora
-     * @param  [type] $onu  oznaka naplatnog uređaja
-     * @param  [type] $uir  ukupni iznos računa
-     * @return [type]       md5 hash
+     * Zaštitni kod izdavatelja (ZKI) per Tehnička specifikacija za korisnike v2.7, poglavlje 12:
+     * MD5( RSA-SHA256 potpis( oib + datVrij + bor + opp + onu + uir ) ), 32 hex znamenki (0-9, a-f).
+     * v2.6 and earlier signed with RSA-SHA1.
+     *
+     * @param  string $pkey privatni ključ iz certifikata (PEM)
+     * @param  string $oib  OIB obveznika
+     * @param  string $dt   datum i vrijeme izdavanja računa kao tekst u formatu 'dd.MM.gggg HH:mm:ss'
+     *                      (razmak između datuma i vremena, ne 'T' kao u XML poruci)
+     * @param  string $bor  brojčana oznaka računa
+     * @param  string $opp  oznaka poslovnog prostora
+     * @param  string $onu  oznaka naplatnog uređaja
+     * @param  string $uir  ukupni iznos računa s točkom kao decimalnim separatorom (npr. 1245.56)
+     * @return string       32-znamenkasti heksadecimalni zapis
      */
-    public function securityCode($pkey, $oib, $dt, $bor, $opp, $onu, $uir) {
-        $medjurezultat  = $pkey;
-        $medjurezultat .= $oib;
-        $medjurezultat .= $dt;
-        $medjurezultat .= $opp;
-        $medjurezultat .= $bor;
-        $medjurezultat .= $onu;
-        $medjurezultat .= $uir;
-        return $this->securityCode = md5($medjurezultat);
+    public function securityCode($pkey, $oib, $dt, $bor, $opp, $onu, $uir)
+    {
+        $medjurezultat = $oib . $dt . $bor . $opp . $onu . $uir;
+
+        $zastKodSignature = null;
+        if (!openssl_sign($medjurezultat, $zastKodSignature, $pkey, OPENSSL_ALGO_SHA256)) {
+            throw new \Exception('Error creating security code');
+        }
+
+        return $this->securityCode = md5($zastKodSignature);
     }
 
     public function toXML()
